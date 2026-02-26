@@ -3,7 +3,7 @@ from copy import copy
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
-from openpyxl.styles import Font, Alignment
+from openpyxl.styles import Font, Alignment, Border, Side
 
 # ========= 关键字 =========
 HEADER_END_KEYS = ["ITEM NO.", "DESCRIPTION"]
@@ -25,7 +25,6 @@ def _is_header_end(text):
     return all(k in text for k in HEADER_END_KEYS)
 
 
-# 封装一个样式复制函数，确保所有属性都被保留
 def copy_cell_style(source_cell, target_cell):
     if source_cell.has_style:
         target_cell.font = copy(source_cell.font)
@@ -365,6 +364,28 @@ def split_excel_by_row(input_path, output_prefix, split_size=30):
                 except Exception as e:
                     print(f"   -> 加粗 TOTAL DAP 时出错: {e}")
                 # =========================================================
+        # ───────────── 自動在 SUPPLIER'S ACKNOWLDGMENT 上方加 top border ─────────────
+        signature_row = None
+        for r in range(1, new_ws.max_row + 1):
+            row_text = " ".join(str(new_ws.cell(r, c).value or "").strip().upper()
+                                for c in range(1, new_ws.max_column + 1))
+            # 寬鬆匹配：只要有 SUPPLIER + ACKNOW + MENT（不管有沒有 E）
+            if "SUPPLIER" in row_text and "ACKNOW" in row_text and "MENT" in row_text:
+                signature_row = r
+                break
+
+        if signature_row:
+            thin_black = Side(style="medium", color="000000")
+            # 加在上方橫線：通常是 signature_row 本身的上邊框（top border）
+            # 如果想加在上一行，可以改成 signature_row - 1（但先試這行）
+            for col in range(4, 10):  # D 到 I (4~9)，可調整範圍
+                cell = new_ws.cell(signature_row, col)
+                current_border = copy(cell.border) if cell.border else Border()
+                current_border.top = thin_black
+                cell.border = current_border
+            print(f"已在第 {signature_row} 行 (SUPPLIER'S ACKNOWLDGMENT) 上方加了 top border")
+        else:
+            print("警告：仍未找到包含 SUPPLIER & ACKNOW 的行，請檢查 debug 輸出")
 
         # 保存
         suffix = chr(64 + idx)
